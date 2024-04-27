@@ -87,10 +87,16 @@ export interface CalendarListProps
    * - calendarSpacing
    */
   renderItem?: FlashListProps<CalendarMonthEnhanced>["renderItem"];
+
+  /**
+   * The width of the calendar. Required if list is horizontal
+   */
+  calendarWidth?: number;
 }
 
 export interface CalendarListRef {
   scrollToDate: (date: Date, animated: boolean) => void;
+  scrollToIndex: (index: number, animated: boolean) => void;
 }
 
 export const CalendarList = memo(
@@ -133,6 +139,7 @@ export const CalendarList = memo(
         getCalendarMonthFormat,
         calendarMaxDateId,
         calendarMinDateId,
+        calendarWidth,
         ...flatListProps
       } = props;
 
@@ -226,44 +233,56 @@ export const CalendarList = memo(
 
       const flashListRef = useRef<FlashList<CalendarMonthEnhanced>>(null);
 
-      useImperativeHandle(ref, () => ({
-        scrollToDate(date, animated) {
-          const monthId = toDateId(startOfMonth(date));
+      useImperativeHandle(ref, () => {
+        return {
+          scrollToDate(date, animated) {
+            const monthId = toDateId(startOfMonth(date));
 
-          let baseMonthList = monthList;
-          let index = baseMonthList.findIndex((month) => month.id === monthId);
+            let baseMonthList = monthList;
+            let index = baseMonthList.findIndex(
+              (month) => month.id === monthId
+            );
 
-          if (index === -1) {
-            baseMonthList = addMissingMonths(monthId);
-            index = baseMonthList.findIndex((month) => month.id === monthId);
-          }
+            if (index === -1) {
+              baseMonthList = addMissingMonths(monthId);
+              index = baseMonthList.findIndex((month) => month.id === monthId);
+            }
 
-          const currentOffset = baseMonthList
-            .slice(0, index)
-            .reduce((acc, month) => {
-              const currentHeight = getHeightForMonth({
-                calendarMonth: month,
-                calendarSpacing,
-                calendarDayHeight,
-                calendarMonthHeaderHeight,
-                calendarRowVerticalSpacing,
-                calendarWeekHeaderHeight,
-                calendarAdditionalHeight,
+            const currentOffset = baseMonthList
+              .slice(0, index)
+              .reduce((acc, month) => {
+                if (flatListProps.horizontal) {
+                  return acc + (props.calendarWidth ?? 0);
+                } else {
+                  return (
+                    acc +
+                    getHeightForMonth({
+                      calendarMonth: month,
+                      calendarSpacing,
+                      calendarDayHeight,
+                      calendarMonthHeaderHeight,
+                      calendarRowVerticalSpacing,
+                      calendarWeekHeaderHeight,
+                      calendarAdditionalHeight,
+                    })
+                  );
+                }
+              }, 0);
+
+            // Wait for the next render cycle to ensure the list has been
+            // updated with the new months.
+            setTimeout(() => {
+              flashListRef.current?.scrollToOffset({
+                offset: currentOffset,
+                animated,
               });
-
-              return acc + currentHeight;
             }, 0);
-
-          // Wait for the next render cycle to ensure the list has been
-          // updated with the new months.
-          setTimeout(() => {
-            flashListRef.current?.scrollToOffset({
-              offset: currentOffset,
-              animated,
-            });
-          }, 0);
-        },
-      }));
+          },
+          scrollToIndex(index: number, animated: boolean) {
+            flashListRef.current?.scrollToIndex({ index, animated });
+          },
+        };
+      });
 
       const calendarContainerStyle = useMemo(() => {
         return { paddingBottom: calendarSpacing };
